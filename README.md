@@ -1,17 +1,7 @@
 # Veto
 
-**Veto** is the foundation for **ReturnGuard**, a governed AI-powered ecommerce returns and refunds review system. It is designed to make return decisions auditable, policy-aware, and subject to human oversight.
+**Veto** is a governed AI-powered ecommerce returns and refunds review system. It is designed to make return decisions auditable, policy-aware, and subject to human oversight.
 
-> **Project status:** Early development. The repository currently contains the Docker Compose infrastructure and the first FastAPI backend slice. The asynchronous agent pipeline, frontend, authentication, governance services, and observability stack below are planned components unless explicitly marked as implemented.
-
-## Current functionality
-
-- FastAPI application with automatic OpenAPI documentation
-- Asynchronous SQLAlchemy access to PostgreSQL
-- Return creation and retrieval endpoints
-- Request validation with Pydantic
-- Health-check endpoint
-- Dockerized local development with PostgreSQL and Redis services
 
 ## Architecture
 
@@ -30,15 +20,16 @@ flowchart TD
     B --> D[Decision Engine]
     D --> C[Independent Critic]
     C --> V[Governance Gate]
+
     V -->|Needs review| H[Human Reviewer]
-    V -->|Verified safe outcome| DB
-    H --> DB
+    V -->|Verified safe outcome| H
+
+    H -->|Approve, reject, or request more evidence| DB
+
     OPA[OPA Policy Enforcement] -.-> V
     MCP[MCP Approved Tools] -.-> V
     G -.-> OBS[Langfuse / Evaluations]
 ```
-
-> **Note:** This diagram describes the target architecture, not the current implementation. Components such as the arq worker, LangGraph nodes, Policy RAG, risk model, critic, governance gate, OPA integration, MCP tools, human-review flow, and Langfuse are planned.
 
 The broader design also considers Keycloak, Qdrant, Prometheus, Grafana, MinIO, MailHog, and Vault. These should be introduced only when a concrete phase requires them.
 
@@ -48,7 +39,7 @@ See the [architecture notes](Arch/ReverseGuard.txt) and [architecture diagram](A
 
 ```text
 .
-├── Arch/                 # Architecture notes and diagrams
+
 ├── backend/
 │   ├── app/
 │   │   ├── api/           # FastAPI routes
@@ -60,7 +51,6 @@ See the [architecture notes](Arch/ReverseGuard.txt) and [architecture diagram](A
 └── README.md
 ```
 
-The layout will expand as the worker, pipeline, tests, governance policies, evaluation dataset, and frontend are implemented.
 
 ## Prerequisites
 
