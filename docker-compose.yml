@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:16
+    environment: {POSTGRES_USER: veto, POSTGRES_PASSWORD: veto, POSTGRES_DB: veto}
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U veto"]
+      interval: 3s
+      retries: 10
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://veto:veto@postgres:5432/veto
+      REDIS_URL: redis://redis:6379/0
+    ports: ["8000:8000"]
+    volumes: ["./backend:/srv"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+volumes:
+  pgdata:
