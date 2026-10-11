@@ -81,5 +81,15 @@ async def process_return(ctx, return_id: str):
             }
 
         except Exception:
+
             await db.rollback()
+
+            # Persist the failure status
+            failed_return = await db.get(Return, return_uuid)
+
+            if failed_return is not None:
+                failed_return.status = "failed"
+                await db.commit()
+
+            # Let arq know the job failed
             raise

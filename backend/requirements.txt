@@ -5,3 +5,5 @@ asyncpg
 pydantic-settings
 arq #for job queue
 langgraph #for agentic development
+pytest
+pytest-asyncio
