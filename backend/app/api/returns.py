@@ -3,10 +3,11 @@ import uuid
 
 from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.db.models import Return
+from app.db.models import OrderContext, Return
 from app.db.session import get_db
 from app.schemas.returns import ReturnCreate, ReturnOut
 
@@ -20,34 +21,44 @@ async def create_return(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    # Create a new Return object using the demo user and validated request data.
+    # Look up the existing order context instead of trusting
+    # platform, brand, or delivery information from the request.
+    result = await db.execute(
+        select(OrderContext).where(
+            OrderContext.order_id == body.order_id
+        )
+    )
+    order_context = result.scalar_one_or_none()
+
+    # A return can only be created for an order known to Veto.
+    if order_context is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Order not found",
+        )
+
+    # Create the return using the trusted order-context reference.
     r = Return(
         user_id=settings.demo_user_id,
-        **body.model_dump(),
+        order_context_id=order_context.id,
+        reason=body.reason,
+        amount_cents=body.amount_cents,
     )
-
-    # Stage the new return in the current database session.
     db.add(r)
 
-    # Persist the return in PostgreSQL before enqueueing the background job.
-    # This ensures the worker can find the return when it starts processing.
+    # Persist the return before enqueueing its background job.
     await db.commit()
-
-    # Refresh the object with the latest database values, including its generated ID.
     await db.refresh(r)
 
     try:
-        # Get the Redis queue pool initialized during FastAPI startup.
+        # Get the Redis pool initialized during FastAPI startup.
         queue: ArqRedis = request.app.state.queue
 
-        # Enqueue a background job; the arq worker will call process_return
-        # with this return ID and execute the LangGraph workflow.
+        # Ask the worker to process this return asynchronously.
         await queue.enqueue_job("process_return", str(r.id))
 
     except Exception as exc:
-        # The database commit has already succeeded, so the return still exists.
-        # Return 503 to indicate that background processing could not be queued.
-        # Check the saved return before retrying to avoid creating duplicates.
+        # The return is already committed even if enqueueing fails.
         raise HTTPException(
             status_code=503,
             detail=(
@@ -56,7 +67,7 @@ async def create_return(
             ),
         ) from exc
 
-    # Return the saved record to the client with HTTP 201 Created.
+    # Return the newly saved record to the client.
     return r
 
 
@@ -68,9 +79,11 @@ async def get_return(
     # Fetch the return by its UUID primary key.
     r = await db.get(Return, return_id)
 
-    # Return HTTP 404 if no record exists for the requested ID.
-    if not r:
-        raise HTTPException(404, "Return not found")
+    # Return HTTP 404 if the requested return does not exist.
+    if r is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Return not found",
+        )
 
-    # Return the database record; FastAPI serializes it using ReturnOut.
     return r

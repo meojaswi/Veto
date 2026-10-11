@@ -1,8 +1,6 @@
+
 import uuid
 from datetime import datetime, timezone
-
-
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from sqlalchemy import (
     Boolean,
@@ -14,38 +12,12 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
 class Base(DeclarativeBase):
     pass
 
-
-class Return(Base):
-    __tablename__ = "returns"
-
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[str] = mapped_column(String(64), index=True)
-    order_id: Mapped[str] = mapped_column(String(64))
-    reason: Mapped[str] = mapped_column(Text)
-    amount_cents: Mapped[int] = mapped_column(Integer)
-    status: Mapped[str] = mapped_column(String(32), default="pending")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-
-class ReturnDecision(Base):
-    __tablename__ = "return_decisions"
-
-    return_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("returns.id"),
-        primary_key=True,
-    )
-
-    decision: Mapped[str] = mapped_column(String(32))
-    rationale: Mapped[str] = mapped_column(Text)
-    governance_action: Mapped[str] = mapped_column(String(32))
-    intake_errors: Mapped[list] = mapped_column(
-        JSON,
-        default=list,
-    )
 
 class Platform(Base):
     __tablename__ = "platforms"
@@ -80,6 +52,96 @@ class Brand(Base):
         String(150),
         unique=True,
         nullable=False,
+    )
+
+
+class OrderContext(Base):
+    __tablename__ = "order_contexts"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    # External order identifier from the source platform.
+    order_id: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    platform_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("platforms.id"),
+        nullable=False,
+    )
+    brand_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("brands.id"),
+        nullable=False,
+    )
+
+    product_category: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+    )
+
+    delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # Records when this order context was imported into Veto.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+
+class Return(Base):
+    __tablename__ = "returns"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(64),
+        index=True,
+    )
+
+    # Multiple return requests can reference the same order context.
+    order_context_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("order_contexts.id"),
+        nullable=False,
+        index=True,
+    )
+
+    reason: Mapped[str] = mapped_column(Text)
+    amount_cents: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(
+        String(32),
+        default="pending",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
+class ReturnDecision(Base):
+    __tablename__ = "return_decisions"
+
+    return_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("returns.id"),
+        primary_key=True,
+    )
+    decision: Mapped[str] = mapped_column(String(32))
+    rationale: Mapped[str] = mapped_column(Text)
+    governance_action: Mapped[str] = mapped_column(String(32))
+    intake_errors: Mapped[list] = mapped_column(
+        JSON,
+        default=list,
     )
 
 
@@ -143,7 +205,6 @@ class PolicyVersion(Base):
         Integer,
         nullable=False,
     )
-
     effective_from: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -152,7 +213,6 @@ class PolicyVersion(Base):
         DateTime(timezone=True),
         nullable=True,
     )
-
     source_url: Mapped[str | None] = mapped_column(
         String(1000),
         nullable=True,
@@ -178,7 +238,6 @@ class PolicyRule(Base):
         ForeignKey("policy_versions.id"),
         nullable=False,
     )
-
     rule_key: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
@@ -212,7 +271,6 @@ class PolicyEvaluation(Base):
         ForeignKey("policy_versions.id"),
         nullable=True,
     )
-
     outcome: Mapped[str] = mapped_column(
         String(32),
         nullable=False,
